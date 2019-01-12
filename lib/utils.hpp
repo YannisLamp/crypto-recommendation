@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <functional>
+#include <unordered_map>
 
 #include "./data_structures/cust_vector.hpp"
 
@@ -63,6 +64,12 @@ double find_min_vector_distance(std::vector< CustVector<vector_type>* >& vectors
 // Mainly used for csv parsing
 std::vector<std::string> file_to_args(std::string filename, char delimiter);
 
+// Return vector that contains vector of strings from input file
+std::vector< std::vector<std::string> > file_to_str_vectors(std::string filename, char delimiter);
+
+// Return an unordered map that is used to bind a word to a score
+// Used for tweet sentiment analysis
+std::unordered_map<std::string, float> file_to_lexicon(std::string filename, char delimiter);
 
 /*
 * Template utility function definitions

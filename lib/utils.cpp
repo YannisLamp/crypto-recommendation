@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "utils.hpp"
 
@@ -65,4 +66,43 @@ vector<string> file_to_args(string filename, char delimiter) {
 
     input_file.close();
     return args;
+}
+
+
+vector< vector<string> > file_to_str_vectors(string filename, char delimiter) {
+    vector< vector<string> > vecs;
+
+    ifstream input_file;
+    input_file.open(filename);
+    if ( !input_file.is_open() )
+        return vecs;
+
+    string line;
+    while (getline(input_file, line)) {
+        vector<string> current_vector = split(line, delimiter);
+        vecs.emplace_back(current_vector);
+    }
+
+    input_file.close();
+    return vecs;
+}
+
+
+std::unordered_map<string, float> file_to_lexicon(string filename, char delimiter) {
+    std::unordered_map<string, float> lexicon;
+
+    ifstream input_file;
+    input_file.open(filename);
+    if ( !input_file.is_open() )
+        return lexicon;
+
+    string line;
+    while (getline(input_file, line)) {
+        vector<string> current_word = split(line, delimiter);
+        float score = stof(current_word[1]);
+        lexicon.emplace(current_word[0], score);
+    }
+
+    input_file.close();
+    return lexicon;
 }

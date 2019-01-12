@@ -3,11 +3,13 @@
 
 #include <chrono>
 #include <random>
+#include <vector>
 
 #include "./lib/in_out/arg_parser.h"
 #include "./lib/in_out/vector_reader.hpp"
 #include "./lib/data_structures/cust_vector.hpp"
 #include "./lib/data_structures/cust_hashtable.hpp"
+#include "./lib/data_structures/tweet.h"
 #include "./lib/lsh_cube.hpp"
 #include "./lib/clustering_phases/initialization.hpp"
 #include "./lib/clustering_phases/assignment.hpp"
@@ -16,8 +18,7 @@
 
 using namespace std;
 
-void get_cluster_args(int argc, char* argv[], string* input_file, string* config_file, string* output_file,
-                      string* metric_type, bool* print_complete);
+void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate);
 
 void get_cluster_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
                         char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations, double* min_dist_kmeans);
@@ -36,12 +37,13 @@ int main(int argc, char* argv[]) {
 
     // Get program options from arguments
     string input_file, config_file, output_file;
-    string metric_type;
-    bool print_complete = false;
+    bool validate = "false";
 
-    get_cluster_args(argc, argv, &input_file, &config_file, &output_file, &metric_type, &print_complete);
+    get_recommendation_args(argc, argv, &input_file, &output_file, &validate);
+    config_file = "../cluster.conf";
+    string metric_type = "cosine";
 
-    // Get program options from configuration file
+    // Get all necessary program options from configuration file, even configurations for assignment 2 clustering
     int cluster_num = 0;
     int k = 4;
     int L = 5;
@@ -57,7 +59,7 @@ int main(int argc, char* argv[]) {
             &cube_range_c, &cube_probes, &max_algo_iterations, &min_dist_kmeans);
 
     // Read and save vectors from specified input file, parse metric option
-    VectorReader<double>* inputReader = new VectorReader<double>(input_file);
+    /*VectorReader<double>* inputReader = new VectorReader<double>(input_file);
     if ( !inputReader->read(csv_delimiter, 1, [](const string& x){ return stod(x); }) ) {
         std::cerr << "Error opening file " + input_file << std::endl;
         return -1;
@@ -67,6 +69,16 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     delete inputReader;
+    */
+
+    /*
+     * Read necessary data from assignment 2 output
+     * If there are no data, show error and create them from scratch
+     *
+     * Note that any combination of clustering phases from assignment 2 can be used here, though
+     * a combination of       is used here
+     */
+
 
 
     /*
@@ -74,17 +86,72 @@ int main(int argc, char* argv[]) {
      * Create and Populate Hashtables for LSH and Hypercube
      */
 
-    vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
+    /*vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
             lsh_bucket_div, euclidean_h_w);
 
-    CustHashtable<double>* hypercube = create_hypercube<double>(input_vectors, metric_type, k, euclidean_h_w);
+    CustHashtable<double>* hypercube = create_hypercube<double>(input_vectors, metric_type, k, euclidean_h_w);*/
+
+    vector< vector<string> > verbose_tweets = file_to_str_vectors(input_file, csv_delimiter);
+
+    // PROSOXIIIII AYTO PREPEI NA ALLAKSEI
+    unordered_map<string, float> lexicon = file_to_lexicon("../vader_lexicon.csv", csv_delimiter);
+
+    int aaaa = 1;
+
+    // Create tweet unordered map
+    unordered_map<int, Tweet> tweets;
+    for ()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /*
      * Main Clustering Algorithms
      * Various combinations of clustering phases
      * Time algorithms evaluate them and generate stats
      */
-
+    /*
     // Open output file
     ofstream outFile(output_file);
 
@@ -412,36 +479,29 @@ int main(int argc, char* argv[]) {
         std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
         print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
     }
-
+    */
     /*
      * Program End
      * Free Allocated Memory
      */
 
-    outFile.close();
+    /*outFile.close();
     for (int i = 0; i < lsh_hashtables.size(); i++) {
         delete lsh_hashtables[i];
     }
-    delete hypercube;
+    delete hypercube;*/
 }
 
 
-void get_cluster_args(int argc, char* argv[], string* input_file, string* config_file, string* output_file,
-        string* metric_type, bool* print_complete) {
+void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate) {
     ArgParser* progArgs = new ArgParser(argc, argv);
 
     // For file paths, if no argument is given, request it from the user
-    if (progArgs->flagExists("-i"))
-        *input_file = progArgs->getFlagValue("-i");
+    if (progArgs->flagExists("-d"))
+        *input_file = progArgs->getFlagValue("-d");
     else {
         cout << "Please specify input file path" << endl;
         cin >> *input_file;
-    }
-    if (progArgs->flagExists("-c"))
-        *config_file = progArgs->getFlagValue("-c");
-    else {
-        cout << "Please specify configuration file path" << endl;
-        cin >> *config_file;
     }
     if (progArgs->flagExists("-o"))
         *output_file = progArgs->getFlagValue("-o");
@@ -449,14 +509,8 @@ void get_cluster_args(int argc, char* argv[], string* input_file, string* config
         cout << "Please specify output file path" << endl;
         cin >> *output_file;
     }
-    if (progArgs->flagExists("-d"))
-        *metric_type = progArgs->getFlagValue("-d");
-    else {
-        cout << "Please specify metric to be used" << endl;
-        cin >> *metric_type;
-    }
-    if (progArgs->flagExists("-complete"))
-        *print_complete = true;
+    if (progArgs->flagExists("-validate"))
+        *validate = true;
 
     delete progArgs;
 }
