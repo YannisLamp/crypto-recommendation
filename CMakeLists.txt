@@ -26,7 +26,7 @@ add_executable(cluster
         lib/clustering_phases/assignment.hpp
         lib/clustering_phases/silhouette.hpp
         lib/clustering_phases/update.hpp
-        lib/lsh_cube.hpp)
+        lib/lsh_cube.hpp lib/data_structures/tweet.cpp lib/data_structures/tweet.h lib/data_structures/user.cpp lib/data_structures/user.h)
 
 
 add_executable(tests

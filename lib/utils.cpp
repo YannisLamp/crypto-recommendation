@@ -79,6 +79,10 @@ vector< vector<string> > file_to_str_vectors(string filename, char delimiter) {
 
     string line;
     while (getline(input_file, line)) {
+        // Remove windows carriage return
+        if (line[line.size()-1] == '\r')
+            line.erase(line.size() - 1);
+
         vector<string> current_vector = split(line, delimiter);
         vecs.emplace_back(current_vector);
     }

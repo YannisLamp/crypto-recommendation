@@ -4,6 +4,7 @@
 #include <chrono>
 #include <random>
 #include <vector>
+#include <utility>
 
 #include "./lib/in_out/arg_parser.h"
 #include "./lib/in_out/vector_reader.hpp"
@@ -20,13 +21,14 @@ using namespace std;
 
 void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate);
 
-void get_cluster_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
-                        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations, double* min_dist_kmeans);
+void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
+                        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations,
+                        double* min_dist_kmeans, string* lexicon_file, string* query_file);
 
 template <typename vector_type>
 void print_stats(std::ostream& os, std::vector< std::vector< CustVector<vector_type>* > > clusters,
-                 std::vector< CustVector<vector_type>* >& centroids, std::vector<double>& sill, string algorithm, string metric_type,
-                 chrono::duration<double> time_span, bool is_kmeans, bool print_complete);
+                 std::vector< CustVector<vector_type>* >& centroids, std::vector<double>& sill, string algorithm,
+                 string metric_type, chrono::duration<double> time_span, bool is_kmeans, bool print_complete);
 
 int main(int argc, char* argv[]) {
 
@@ -40,8 +42,7 @@ int main(int argc, char* argv[]) {
     bool validate = "false";
 
     get_recommendation_args(argc, argv, &input_file, &output_file, &validate);
-    config_file = "../cluster.conf";
-    string metric_type = "cosine";
+    config_file = "./cluster.conf";
 
     // Get all necessary program options from configuration file, even configurations for assignment 2 clustering
     int cluster_num = 0;
@@ -54,9 +55,23 @@ int main(int argc, char* argv[]) {
     int max_algo_iterations = 30;
     double min_dist_kmeans = 0.05;
     char csv_delimiter = ' ';
+    string lexicon_file, query_file;
+    string metric_type = "cosine";
 
-    get_cluster_config(config_file, &cluster_num, &k, &L, &lsh_bucket_div, &euclidean_h_w, &csv_delimiter,
-            &cube_range_c, &cube_probes, &max_algo_iterations, &min_dist_kmeans);
+    get_config(config_file, &cluster_num, &k, &L, &lsh_bucket_div, &euclidean_h_w, &csv_delimiter, &cube_range_c,
+            &cube_probes, &max_algo_iterations, &min_dist_kmeans, &lexicon_file, &query_file);
+
+
+    /*
+     * Create assignment 2 clustering data
+     *
+     * Note that any combination of clustering phases from assignment 2 can be used here, though a combination of
+     * kmeans++ for initialization, LSH range search for assignment and kmeans for updating the cluster centers is
+     * used here, as it provides a very good results quite fast
+     *
+     * To speed up the clustering, random center selection can be used instead of kmeans++
+     */
+
 
     // Read and save vectors from specified input file, parse metric option
     /*VectorReader<double>* inputReader = new VectorReader<double>(input_file);
@@ -64,21 +79,44 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error opening file " + input_file << std::endl;
         return -1;
     }
-    vector< CustVector<double> > input_vectors = inputReader->getReadVectors();
-    if (input_vectors.empty()) {
+    vector< CustVector<double> > input_vectors_of_2 = inputReader->getReadVectors();
+    if (input_vectors_of_2.empty()) {
         return -1;
     }
     delete inputReader;
+
+
+    vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors_of_2, metric_type, k, L,
+            lsh_bucket_div, euclidean_h_w);
+
+    // Fast and reliable clustering, add random selection to make it faster
+    {
+        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
+        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        int clustering_iterations = 0;
+        bool continue_clustering = true;
+        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
+            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
+            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
+            clustering_iterations++;
+        }
+
+        // Stats printing
+        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
+                centroids.size());
+        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
+        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
+
+        // If k-means is used then delete centers
+        for (int i = 0; i < centroids.size(); i++)
+            delete centroids[i];
+
+    }
+
+
+
+
     */
-
-    /*
-     * Read necessary data from assignment 2 output
-     * If there are no data, show error and create them from scratch
-     *
-     * Note that any combination of clustering phases from assignment 2 can be used here, though
-     * a combination of       is used here
-     */
-
 
 
     /*
@@ -86,400 +124,44 @@ int main(int argc, char* argv[]) {
      * Create and Populate Hashtables for LSH and Hypercube
      */
 
-    /*vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
-            lsh_bucket_div, euclidean_h_w);
+    //vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
+    //        lsh_bucket_div, euclidean_h_w);
 
-    CustHashtable<double>* hypercube = create_hypercube<double>(input_vectors, metric_type, k, euclidean_h_w);*/
 
-    vector< vector<string> > verbose_tweets = file_to_str_vectors(input_file, csv_delimiter);
+    vector< vector<string> > input_tweets = file_to_str_vectors(input_file, csv_delimiter);
+    vector< vector<string> > query_crypto = file_to_str_vectors(query_file, csv_delimiter);
+    unordered_map<string, float> lexicon = file_to_lexicon(lexicon_file, csv_delimiter);
 
-    // PROSOXIIIII AYTO PREPEI NA ALLAKSEI
-    unordered_map<string, float> lexicon = file_to_lexicon("../vader_lexicon.csv", csv_delimiter);
 
-    int aaaa = 1;
 
     // Create tweet unordered map
-    unordered_map<int, Tweet> tweets;
-    for ()
+    unordered_map<string, Tweet> tweets;
+    for (auto& tweet_words : input_tweets) {
+        Tweet tweetWStats(tweet_words, lexicon, query_crypto);
+        tweets.emplace(tweetWStats.getId(), tweetWStats);
+    }
 
+    vector< CustVector<double> > user_vectors = tweets_to_user_vectors<double>(tweets, query_crypto.size());
 
+    /*for (auto vec : user_vectors) {
+        if (vec.getId() == "30") {
+            int aaaaaa= 0;
+        }
+    }*/
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    int aaa=0;
 
     /*
-     * Main Clustering Algorithms
-     * Various combinations of clustering phases
-     * Time algorithms evaluate them and generate stats
+     * Cosine LSH Recommendation
      */
-    /*
-    // Open output file
-    ofstream outFile(output_file);
 
-    // First combination I1A1U1
-    {
-        string algorithm = "I1A1U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
 
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
 
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
 
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
 
-    }
 
 
-    // Second combination I1A1U2
-    {
-        string algorithm = "I1A1U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-
-    }
-
-
-    // Third combination I1A2U1
-    {
-        string algorithm = "I1A2U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
-
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
-
-    }
-
-    // Forth combination I1A2U2
-    {
-        string algorithm = "I1A2U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-    }
-
-    // Fifth combination I1A3U1
-    {
-        string algorithm = "I1A3U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            cube_range_assignment(input_vectors, *hypercube, centroids, metric_type, cube_probes, k);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
-
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
-
-    }
-
-    // Sixth combination I1A3U2
-    {
-        string algorithm = "I1A3U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            cube_range_assignment(input_vectors, *hypercube, centroids, metric_type, cube_probes, k);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-
-    }
-
-    // Seventh combination I2A1U1
-    {
-        string algorithm = "I2A1U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
-
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
-
-    }
-
-
-    // Eighth combination I2A1U2
-    {
-        string algorithm = "I2A1U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-
-    }
-
-
-    // Ninth combination I2A2U1
-    {
-        string algorithm = "I2A2U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
-
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
-
-    }
-
-    // Tenth combination I2A2U2
-    {
-        string algorithm = "I2A2U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-    }
-
-    // Eleventh combination I2A3U1
-    {
-        string algorithm = "I2A3U1";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            cube_range_assignment(input_vectors, *hypercube, centroids, metric_type, cube_probes, k);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
-
-        // If k-means is used then delete centers
-        for (int i = 0; i < centroids.size(); i++)
-            delete centroids[i];
-
-    }
-
-    // Twelfth combination I2A3U2
-    {
-        string algorithm = "I2A3U2";
-        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
-
-        vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
-        int clustering_iterations = 0;
-        bool continue_clustering = true;
-        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            cube_range_assignment(input_vectors, *hypercube, centroids, metric_type, cube_probes, k);
-            continue_clustering = pam_lloyds(input_vectors, centroids, metric_type);
-            clustering_iterations++;
-        }
-
-        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast< chrono::duration<double> >(t2 - t1);
-
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, false, print_complete);
-    }
-    */
     /*
      * Program End
      * Free Allocated Memory
@@ -489,7 +171,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < lsh_hashtables.size(); i++) {
         delete lsh_hashtables[i];
     }
-    delete hypercube;*/
+    */
 }
 
 
@@ -516,37 +198,42 @@ void get_recommendation_args(int argc, char* argv[], string* input_file, string*
 }
 
 
-void get_cluster_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
-        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations, double* min_dist_kmeans) {
+void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
+        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations, double* min_dist_kmeans,
+        string* lexicon_file, string* query_file) {
 
     ArgParser* configArgs = new ArgParser( file_to_args(config_file, ' ') );
 
-    if (configArgs->flagExists("number_of_clusters:"))
-        *cluster_num = stoi( configArgs->getFlagValue("number_of_clusters:") );
+    if (configArgs->flagExists("number_of_clusters"))
+        *cluster_num = stoi( configArgs->getFlagValue("number_of_clusters") );
     else {
         cout << "Please specify the number of clusters to be found" << endl;
         cin >> *cluster_num;
     }
-    if (configArgs->flagExists("number_of_hash_functions:"))
-        *k = stoi( configArgs->getFlagValue("number_of_hash_functions:") );
-    if (configArgs->flagExists("number_of_hash_tables:"))
-        *L = stoi( configArgs->getFlagValue("number_of_hash_tables:") );
-    if (configArgs->flagExists("lsh_bucket_div:"))
-        *lsh_bucket_div = stoi( configArgs->getFlagValue("lsh_bucket_div:") );
-    if (configArgs->flagExists("euclidean_h_w:"))
-        *euclidean_h_w = stod( configArgs->getFlagValue("euclidean_h_w:") );
-    if (configArgs->flagExists("cube_range_c:"))
-        *cube_range_c = stoi( configArgs->getFlagValue("cube_range_c:") );
-    if (configArgs->flagExists("cube_probes:"))
-        *cube_probes = stoi( configArgs->getFlagValue("cube_probes:") );
-    if (configArgs->flagExists("max_algo_iterations:"))
-        *max_algo_iterations = stoi( configArgs->getFlagValue("max_algo_iterations:") );
-    if (configArgs->flagExists("min_dist_kmeans:"))
-        *min_dist_kmeans = stod( configArgs->getFlagValue("min_dist_kmeans:") );
-    if (configArgs->flagExists("csv_delimiter:")) {
-        string delim_str = configArgs->getFlagValue("csv_delimiter:");
-        *csv_delimiter = delim_str[1];
+    if (configArgs->flagExists("number_of_hash_functions"))
+        *k = stoi( configArgs->getFlagValue("number_of_hash_functions") );
+    if (configArgs->flagExists("number_of_hash_tables"))
+        *L = stoi( configArgs->getFlagValue("number_of_hash_tables") );
+    if (configArgs->flagExists("lsh_bucket_div"))
+        *lsh_bucket_div = stoi( configArgs->getFlagValue("lsh_bucket_div") );
+    if (configArgs->flagExists("euclidean_h_w"))
+        *euclidean_h_w = stod( configArgs->getFlagValue("euclidean_h_w") );
+    if (configArgs->flagExists("cube_range_c"))
+        *cube_range_c = stoi( configArgs->getFlagValue("cube_range_c") );
+    if (configArgs->flagExists("cube_probes"))
+        *cube_probes = stoi( configArgs->getFlagValue("cube_probes") );
+    if (configArgs->flagExists("max_algo_iterations"))
+        *max_algo_iterations = stoi( configArgs->getFlagValue("max_algo_iterations") );
+    if (configArgs->flagExists("min_dist_kmeans"))
+        *min_dist_kmeans = stod( configArgs->getFlagValue("min_dist_kmeans") );
+    if (configArgs->flagExists("csv_delimiter")) {
+        string delim_str = configArgs->getFlagValue("csv_delimiter");
+        *csv_delimiter = char( stoi(delim_str) );
     }
+    if (configArgs->flagExists("lexicon_file"))
+        *lexicon_file = configArgs->getFlagValue("lexicon_file");
+    if (configArgs->flagExists("query_file"))
+        *query_file = configArgs->getFlagValue("query_file");
 
     delete configArgs;
 }
