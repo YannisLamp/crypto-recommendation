@@ -20,7 +20,6 @@
  */
 
 
-
 // Create and return different CustVector objects, each representing a user, from an input tweet map
 template <typename dim_type>
 std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets, int crypto_num);
@@ -50,6 +49,10 @@ std::vector<dim_type> get_predicted_user_sim(std::vector< CustVector<dim_type>* 
 template <typename dim_type>
 std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N,
         std::vector<double> similarities);
+
+// Return predicted top N (highest scoring) cryptocurrency indexes for an input user
+template <typename dim_type>
+std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N);
 
 /*
 * Template utility function definitions
@@ -221,6 +224,27 @@ std::vector<dim_type> get_predicted_user_sim(std::vector< CustVector<dim_type>* 
 template <typename dim_type>
 std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N,
         std::vector<double> similarities) {
+
+    std::vector<dim_type> predicted_scores = get_predicted_user_sim(neighbors, user, similarities);
+    std::vector<int> unknown_indexes = user.getUnknownIndexes();
+    std::vector<dim_type> unknown_predicted(unknown_indexes.size());
+
+    for (int i = 0; i < unknown_indexes.size(); i++)
+        unknown_predicted[i] = predicted_scores[unknown_indexes[i]];
+
+    //parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
+
+    unknown_indexes.resize(N);
+    return unknown_indexes;
+}
+
+
+template <typename dim_type>
+std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N) {
+    // If no similarities as input, calculate from scratch
+    std::vector<double> similarities(neighbors.size());
+    for (int i = 0; i < neighbors.size(); i++)
+        similarities[i] = neighbors[i]->cosineSimilarity(&user);
 
     std::vector<dim_type> predicted_scores = get_predicted_user_sim(neighbors, user, similarities);
     std::vector<int> unknown_indexes = user.getUnknownIndexes();

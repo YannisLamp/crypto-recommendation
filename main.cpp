@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
 
 
     // Create LSH hashtables for LSH recommendation
-    /*{
+    {
         string metric_type = "cosine";
         outFile << "Cosine LSH" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
@@ -161,7 +161,7 @@ int main(int argc, char* argv[]) {
             // Get top 5 recommendations
             // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
             // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_five_recom(neighbors, user, similarities);
+            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5, similarities);
             print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
         }
 
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
 
         for (int i = 0; i < lsh_hashtables.size(); i++)
             delete lsh_hashtables[i];
-    }*/
+    }
     int aaa=0;
 
 
@@ -191,7 +191,7 @@ int main(int argc, char* argv[]) {
 
 
     // Fast and reliable clustering, add random selection to make it faster
-    {
+    /*{
         string metric_type = "euclidean";
         outFile << "Clustering Recommendation" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
@@ -216,7 +216,7 @@ int main(int argc, char* argv[]) {
             // Get top 5 recommendations
             // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
             // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_two_recom(neighbors, user);
+            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5);
             print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
         }
 
@@ -229,7 +229,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
 
-    }
+    }*/
 
 
 
