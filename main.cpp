@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 
     // Get program options from arguments
     string input_file, config_file, output_file;
-    bool validate = "false";
+    bool validate = false;
 
     get_recommendation_args(argc, argv, &input_file, &output_file, &validate);
     config_file = "./cluster.conf";
@@ -85,30 +85,27 @@ int main(int argc, char* argv[]) {
     }
     delete inputReader;
 
+    //std::vector<std::vector<CustVector<double> *> > clusters_of_2;
     // Fast and accurate clustering, add random selection to make it faster
     {
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
+        string metric_type = "cosine";
+        vector<CustVector<double> *> centroids = rand_selection(input_vectors_of_2, proj_2_cluster_num);
         //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
+            lloyds_assignment(input_vectors_of_2, centroids, metric_type);
+            continue_clustering = k_means(input_vectors_of_2, centroids, metric_type, min_dist_kmeans);
             clustering_iterations++;
         }
 
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                centroids.size());
-        //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
+        //clusters_of_2 = separate_clusters_from_input(input_vectors_of_2, centroids.size());
+        //std::vector<double> sill = silhouette_cluster(clusters_of_2, centroids, metric_type);
 
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
     }
-
-
-
-
 
 
     /*
@@ -133,7 +130,10 @@ int main(int argc, char* argv[]) {
 
     // Convert tweets to user vectors, also filter useless users and give the unknown rating the value of the vector's mean
     vector< CustVector<double> > user_vectors = tweets_to_user_vectors<double>(tweets, query_crypto.size());
-    vector< CustVector<double> > fake_user_vectors =
+    vector< CustVector<double> > fake_user_vectors = clusters_to_user_vectors(tweets, input_vectors_of_2,
+            query_crypto.size(), proj_2_cluster_num);
+
+    //input_vectors_of_2.resize(0);
     ofstream outFile(output_file);
 
     /*
@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
      */
 
 
-    /*{
+    {
         string metric_type = "cosine";
         outFile << "Cosine LSH" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
@@ -169,7 +169,24 @@ int main(int argc, char* argv[]) {
 
         for (int i = 0; i < lsh_hashtables.size(); i++)
             delete lsh_hashtables[i];
-    }*/
+
+
+        // 10-fold cross-validation
+        if (validate) {
+            int user_div_num = user_vectors.size() / 10;
+
+            std::vector< std::vector< CustVector<double> > > separate_vectors = split_to_10();
+
+            for (int i = 0; i < 10; i++) {
+                
+
+
+            }
+
+
+        }
+
+    }
 
 
     /*
@@ -185,7 +202,7 @@ int main(int argc, char* argv[]) {
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 
         // Create LSH hashtables for LSH recommendation
-        vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
+        vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(fake_user_vectors, metric_type, k, L,
                 lsh_bucket_div, euclidean_h_w);
 
         // For each user, calculate actual recommendations
@@ -253,7 +270,59 @@ int main(int argc, char* argv[]) {
     }*/
 
 
+    /*
+     * Clustering Recommendation
+     *
+     * Part B.
+     */
 
+    /*{
+        string metric_type = "euclidean";
+        outFile << "Clustering Recommendation" << endl;
+        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
+
+        // Begin clustering
+        vector<CustVector<double> *> centroids = rand_selection(fake_user_vectors, cluster_num);
+        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        int clustering_iterations = 0;
+        bool continue_clustering = true;
+        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
+            lloyds_assignment(fake_user_vectors, centroids, metric_type);
+            continue_clustering = k_means(fake_user_vectors, centroids, metric_type, min_dist_kmeans);
+            clustering_iterations++;
+        }
+        std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(user_vectors,
+                centroids.size());
+
+        // Begin calculating optimal recommendations
+        for (auto &user : user_vectors) {
+            // Find out in what cluster the current user belongs to
+            // Assign it to the cluster whose centroid is the closest
+            double min_dist = user.euclideanDistance(centroids[0]);
+            int min_dist_i = 0;
+            for (int centroid_i = 1; centroid_i < centroids.size(); centroid_i++) {
+                double curr_dist = user.euclideanDistance(centroids[centroid_i]);
+                if (curr_dist < min_dist) {
+                    min_dist = curr_dist;
+                    min_dist_i = centroid_i;
+                }
+            }
+            std::vector< CustVector<double>* > neighbors = clusters[min_dist_i];
+
+            // Get top 2 recommendations
+            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+            // mean value. So during this proccess the mean of the vector is subtracted from each rating
+            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2);
+            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+        }
+
+        //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
+        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+        outFile << "Execution Time: " << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count() << endl;
+        // If k-means is used then delete centers
+        for (int i = 0; i < centroids.size(); i++)
+            delete centroids[i];
+    }*/
 
 
     /*

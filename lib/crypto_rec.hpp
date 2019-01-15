@@ -24,12 +24,10 @@
 template <typename dim_type>
 std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets, int crypto_num);
 
+// Create and return different CustVector objects, each representing a user, from an input vectors that have been clustered
 template <typename dim_type>
 std::vector< CustVector<dim_type> > clusters_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets,
         std::vector< CustVector<dim_type> >& vectors, int crypto_num, int user_num);
-
-template <typename dim_type>
-std::vector< CustVector<dim_type> > clusters_to_user_vectors();
 
 // Returns a vector parallel to the input neighbors vector that contains the cosine similarity of each user pair
 // The neighbors vector is sorted and filtered in this function
@@ -58,10 +56,15 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
 template <typename dim_type>
 std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N);
 
+template <typename dim_type>
+std::vector< std::vector< CustVector<dim_type> > > split_to_10();
+
+//template <typename dim_type>
+
+
 /*
 * Template utility function definitions
 */
-
 
 
 template <typename dim_type>
@@ -133,8 +136,69 @@ template <typename dim_type>
 std::vector< CustVector<dim_type> > clusters_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets,
         std::vector< CustVector<dim_type> >& vectors, int crypto_num, int user_num) {
 
+    // For intermediate calculations
+    std::vector< std::vector<dim_type> > inter_vectors(user_num);
+    std::vector< std::vector<int> > known_indexes(user_num);
+    for (int i = 0; i < user_num; i++) {
+        std::vector<dim_type> user_vector(crypto_num);
+        inter_vectors[i] = user_vector;
 
+        std::vector<int> is_unknown(crypto_num);
+        known_indexes[i] = is_unknown;
+    }
 
+    for (auto& vec : vectors) {
+        if (tweets.count(vec.getId()) > 0) {
+            std::string tweet_id = vec.getId();
+            Tweet currTweet = tweets.at(tweet_id);
+
+            std::vector<int> crypto_indexes = currTweet.getCryptoIndexes();
+            double score = currTweet.getSentimentScore();
+
+            for (auto index : crypto_indexes) {
+                if (score > 0)
+                    inter_vectors[vec.getCluster()][index] = inter_vectors[vec.getCluster()][index] + score;
+
+                known_indexes[vec.getCluster()][index] = 1;
+            }
+        }
+    }
+
+    // Create CustVector objects to represent each user
+    std::vector< CustVector<dim_type> > user_vectors;
+    for (int user_index = 0; user_index < inter_vectors.size(); user_index++) {
+        // Create set of unknown cryptocurrency indexes and calculate vector mean
+        double sum = 0;
+        int known_number = 0;
+        std::set<int> unknown_indexes;
+        bool useless = true;
+        for (int i = 0; i < inter_vectors[user_index].size(); i++) {
+            if (known_indexes[user_index][i] == 0) {
+                unknown_indexes.emplace(i);
+            }
+            else {
+                sum = sum + inter_vectors[user_index][i];
+                known_number++;
+            }
+
+            if (inter_vectors[user_index][i] != 0)
+                useless = false;
+        }
+
+        // Filter vectors that we know nothing of
+        if (!useless) {
+            double mean = sum / known_number;
+
+            // Replace unknown cryptocurrency scores with mean
+            for (int index : unknown_indexes)
+                inter_vectors[user_index][index] = mean;
+
+            CustVector<dim_type> current_user(std::to_string(user_index), inter_vectors[user_index], unknown_indexes, mean);
+            user_vectors.emplace_back(current_user);
+        }
+    }
+
+    return user_vectors;
 }
 
 
@@ -272,5 +336,11 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
     return unknown_indexes;
 }
 
+
+template <typename dim_type>
+std::vector< std::vector< CustVector<dim_type> > > split_to_10() {
+
+
+}
 
 #endif //CRYPTO_REC_HPP
