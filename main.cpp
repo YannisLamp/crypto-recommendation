@@ -22,9 +22,9 @@ using namespace std;
 
 void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate);
 
-void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
-                        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations,
-                        double* min_dist_kmeans, string* lexicon_file, string* query_file);
+void get_config(string config_file, string* proj_2_input, char* proj_2_csv_delimiter, int* proj_2_cluster_num,
+                int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w, char* csv_delimiter,
+                int* max_algo_iterations, double* min_dist_kmeans, string* lexicon_file, string* query_file);
 
 void print_recommendations(std::ostream& os, string user_id, vector<int> recom_crypto_indexes,
         vector< vector<string> > query_crypto, int name_index);
@@ -44,20 +44,22 @@ int main(int argc, char* argv[]) {
     config_file = "./cluster.conf";
 
     // Get all necessary program options from configuration file, even configurations for assignment 2 clustering
+    string proj_2_input;
+    char proj_2_csv_delimiter = ' ';
+    int  proj_2_cluster_num = 100;
+
     int cluster_num = 0;
     int k = 4;
     int L = 5;
     int lsh_bucket_div = 4;
     double euclidean_h_w = 0.01;
-    int cube_range_c = 1;
-    int cube_probes = 0;
     int max_algo_iterations = 30;
     double min_dist_kmeans = 0.05;
     char csv_delimiter = ' ';
     string lexicon_file, query_file;
 
-    get_config(config_file, &cluster_num, &k, &L, &lsh_bucket_div, &euclidean_h_w, &csv_delimiter, &cube_range_c,
-            &cube_probes, &max_algo_iterations, &min_dist_kmeans, &lexicon_file, &query_file);
+    get_config(config_file, &proj_2_input, &proj_2_csv_delimiter, &proj_2_cluster_num, &cluster_num, &k, &L,
+            &lsh_bucket_div, &euclidean_h_w, &csv_delimiter, &max_algo_iterations, &min_dist_kmeans, &lexicon_file, &query_file);
 
 
     /*
@@ -72,8 +74,8 @@ int main(int argc, char* argv[]) {
 
 
     // Read and save vectors from specified input file, parse metric option
-    /*VectorReader<double>* inputReader = new VectorReader<double>(input_file);
-    if ( !inputReader->read(csv_delimiter, 1, [](const string& x){ return stod(x); }) ) {
+    VectorReader<double>* inputReader = new VectorReader<double>(proj_2_input);
+    if ( !inputReader->read(proj_2_csv_delimiter, 1, [](const string& x){ return stod(x); }) ) {
         std::cerr << "Error opening file " + input_file << std::endl;
         return -1;
     }
@@ -83,10 +85,8 @@ int main(int argc, char* argv[]) {
     }
     delete inputReader;
 
-
-
-    // Fast and reliable clustering, add random selection to make it faster
-    {
+    // Fast and accurate clustering, add random selection to make it faster
+    /*{
         vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
         //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
@@ -107,12 +107,10 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
 
-    }
+    }*/
 
 
 
-
-    */
 
 
     /*
@@ -120,8 +118,6 @@ int main(int argc, char* argv[]) {
      * Create and Populate Hashtables for LSH and Hypercube
      */
 
-    //vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
-    //        lsh_bucket_div, euclidean_h_w);
 
     int P = 1;
     vector< vector<string> > input_tweets = file_to_str_vectors(input_file, csv_delimiter, &P);
@@ -149,10 +145,11 @@ int main(int argc, char* argv[]) {
 
 
     // Create LSH hashtables for LSH recommendation
-    {
+    /*{
         string metric_type = "cosine";
         outFile << "Cosine LSH" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
+
         vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
                 lsh_bucket_div, euclidean_h_w);
 
@@ -164,16 +161,17 @@ int main(int argc, char* argv[]) {
             // Get top 5 recommendations
             // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
             // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5, similarities);
+            vector<int> recom_crypto_indexes = get_top_five_recom(neighbors, user, similarities);
             print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
         }
+
         chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
         chrono::duration<double> time_span = chrono::duration_cast<chrono::milliseconds>(t2 - t1);
         outFile << "Execution Time: " << time_span.count() << endl;
 
         for (int i = 0; i < lsh_hashtables.size(); i++)
             delete lsh_hashtables[i];
-    }
+    }*/
     int aaa=0;
 
 
@@ -193,28 +191,45 @@ int main(int argc, char* argv[]) {
 
 
     // Fast and reliable clustering, add random selection to make it faster
-    /*{
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
+    {
+        string metric_type = "euclidean";
+        outFile << "Clustering Recommendation" << endl;
+        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
+
+        // Begin clustering
+        vector<CustVector<double> *> centroids = rand_selection(user_vectors, cluster_num);
         //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lloyds_assignment(input_vectors, centroids, metric_type);
-            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
+            lloyds_assignment(user_vectors, centroids, metric_type);
+            continue_clustering = k_means(user_vectors, centroids, metric_type, min_dist_kmeans);
             clustering_iterations++;
         }
+        std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(user_vectors,
+                centroids.size());
 
-        // Stats printing
-        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
-                                                                                                centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
+        // Begin calculating optimal recommendations
+        for (auto &user : user_vectors) {
+            std::vector< CustVector<double>* > neighbors = clusters[user.getCluster()];
+
+            // Get top 5 recommendations
+            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+            // mean value. So during this proccess the mean of the vector is subtracted from each rating
+            vector<int> recom_crypto_indexes = get_top_two_recom(neighbors, user);
+            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+        }
+
+        //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
+        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+        chrono::duration<double> time_span = chrono::duration_cast<chrono::milliseconds>(t2 - t1);
+        outFile << "Execution Time: " << time_span.count() << endl;
 
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
 
-    }*/
+    }
 
 
 
@@ -262,18 +277,26 @@ void get_recommendation_args(int argc, char* argv[], string* input_file, string*
 }
 
 
-void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w,
-        char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations, double* min_dist_kmeans,
-        string* lexicon_file, string* query_file) {
+void get_config(string config_file, string* proj_2_input, char* proj_2_csv_delimiter, int* proj_2_cluster_num,
+        int* cluster_num, int* k, int* L, int* lsh_bucket_div, double* euclidean_h_w, char* csv_delimiter,
+        int* max_algo_iterations, double* min_dist_kmeans, string* lexicon_file, string* query_file) {
 
     ArgParser* configArgs = new ArgParser( file_to_args(config_file, ' ') );
 
     if (configArgs->flagExists("number_of_clusters"))
         *cluster_num = stoi( configArgs->getFlagValue("number_of_clusters") );
     else {
-        cout << "Please specify the number of clusters to be found" << endl;
+        cout << "Please specify the number of clusters to be created" << endl;
         cin >> *cluster_num;
     }
+    if (configArgs->flagExists("proj_2_input"))
+        *proj_2_input = configArgs->getFlagValue("proj_2_input");
+    if (configArgs->flagExists("proj_2_csv_delimiter")) {
+        string delim_str = configArgs->getFlagValue("proj_2_csv_delimiter");
+        *proj_2_csv_delimiter = delim_str[0];
+    }
+    if (configArgs->flagExists("proj_2_number_of_clusters"))
+        *proj_2_cluster_num = stoi( configArgs->getFlagValue("proj_2_number_of_clusters") );
     if (configArgs->flagExists("number_of_hash_functions"))
         *k = stoi( configArgs->getFlagValue("number_of_hash_functions") );
     if (configArgs->flagExists("number_of_hash_tables"))
@@ -282,10 +305,6 @@ void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_b
         *lsh_bucket_div = stoi( configArgs->getFlagValue("lsh_bucket_div") );
     if (configArgs->flagExists("euclidean_h_w"))
         *euclidean_h_w = stod( configArgs->getFlagValue("euclidean_h_w") );
-    if (configArgs->flagExists("cube_range_c"))
-        *cube_range_c = stoi( configArgs->getFlagValue("cube_range_c") );
-    if (configArgs->flagExists("cube_probes"))
-        *cube_probes = stoi( configArgs->getFlagValue("cube_probes") );
     if (configArgs->flagExists("max_algo_iterations"))
         *max_algo_iterations = stoi( configArgs->getFlagValue("max_algo_iterations") );
     if (configArgs->flagExists("min_dist_kmeans"))

@@ -73,7 +73,7 @@ public:
 
 template <typename dim_type>
 CustVector<dim_type>::CustVector(std::string in_id, std::vector<dim_type> dim_vector)
-        : id(std::move(in_id)), dimensions(dim_vector), cluster_i(-1), dist_from_centroid(0) {};
+        : id(std::move(in_id)), dimensions(dim_vector), cluster_i(-1), dist_from_centroid(0), known_mean(0) {};
 
 template <typename dim_type>
 CustVector<dim_type>::CustVector(std::string in_id, std::vector<dim_type> dim_vector, std::set<int> indexes, double mean)
@@ -82,7 +82,7 @@ CustVector<dim_type>::CustVector(std::string in_id, std::vector<dim_type> dim_ve
 
 template <typename dim_type>
 CustVector<dim_type>::CustVector(std::string in_id, std::vector<dim_type> dim_vector, int cluster, double distance)
-        : id(std::move(in_id)), dimensions(dim_vector), cluster_i(cluster), dist_from_centroid(distance) {};
+        : id(std::move(in_id)), dimensions(dim_vector), cluster_i(cluster), dist_from_centroid(distance), known_mean(0) {};
 
 
 
