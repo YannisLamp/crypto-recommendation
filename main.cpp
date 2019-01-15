@@ -26,10 +26,8 @@ void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_b
                         char* csv_delimiter, int* cube_range_c, int* cube_probes, int* max_algo_iterations,
                         double* min_dist_kmeans, string* lexicon_file, string* query_file);
 
-template <typename vector_type>
-void print_stats(std::ostream& os, std::vector< std::vector< CustVector<vector_type>* > > clusters,
-                 std::vector< CustVector<vector_type>* >& centroids, std::vector<double>& sill, string algorithm,
-                 string metric_type, chrono::duration<double> time_span, bool is_kmeans, bool print_complete);
+void print_recommendations(std::ostream& os, string user_id, vector<int> recom_crypto_indexes,
+        vector< vector<string> > query_crypto, int name_index);
 
 int main(int argc, char* argv[]) {
 
@@ -141,7 +139,7 @@ int main(int argc, char* argv[]) {
 
     // Convert tweets to user vectors, also filter useless users and give the unknown rating the value of the vector's mean
     vector< CustVector<double> > user_vectors = tweets_to_user_vectors<double>(tweets, query_crypto.size());
-
+    ofstream outFile(output_file);
 
     /*
      * Cosine LSH Recommendation
@@ -153,6 +151,7 @@ int main(int argc, char* argv[]) {
     // Create LSH hashtables for LSH recommendation
     {
         string metric_type = "cosine";
+        outFile << "Cosine LSH" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
         vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
                 lsh_bucket_div, euclidean_h_w);
@@ -165,15 +164,17 @@ int main(int argc, char* argv[]) {
             // Get top 5 recommendations
             // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
             // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> rec_crypto_indexes = get_top_N_recom(user, neighbors, 5, similarities);
-            //print_recommendations();
-            int aaa=0;
+            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5, similarities);
+            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
         }
-        //chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        //chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double> >(t2 - t1);
-        //cout <<
+        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+        chrono::duration<double> time_span = chrono::duration_cast<chrono::milliseconds>(t2 - t1);
+        outFile << "Execution Time: " << time_span.count() << endl;
 
+        for (int i = 0; i < lsh_hashtables.size(); i++)
+            delete lsh_hashtables[i];
     }
+    int aaa=0;
 
 
     /*
@@ -224,8 +225,8 @@ int main(int argc, char* argv[]) {
      * Free Allocated Memory
      */
 
-    /*outFile.close();
-    for (int i = 0; i < lsh_hashtables.size(); i++) {
+    outFile.close();
+    /*for (int i = 0; i < lsh_hashtables.size(); i++) {
         delete lsh_hashtables[i];
     }
 
@@ -302,40 +303,16 @@ void get_config(string config_file, int* cluster_num, int* k, int* L, int* lsh_b
 }
 
 
-// Print stats
-template <typename vector_type>
-void print_stats(std::ostream& os, std::vector< std::vector< CustVector<vector_type>* > > clusters,
-        std::vector< CustVector<vector_type>* >& centroids, std::vector<double>& sill, string algorithm, string metric_type,
-        chrono::duration<double> time_span, bool is_kmeans, bool print_complete) {
-    os << "Algorithm: " << algorithm << "\n";
-    os << "Metric: " << metric_type << "\n";
-    for (int cluster_i = 0; cluster_i < clusters.size(); cluster_i++) {
-        os << "CLUSTER-" << cluster_i + 1 << " {size: " << clusters[cluster_i].size() << " centroid: ";
-        if (is_kmeans) {
-            std::vector<vector_type>* dims = centroids[cluster_i]->getDimensions();
-            for (int i = 0; i < dims->size(); i++)
-                os << (*dims)[i] << " ";
-            os << "}" << endl;
-        }
+void print_recommendations(std::ostream& os, string user_id, vector<int> recom_crypto_indexes,
+        vector< vector<string> > query_crypto, int name_index) {
+    os << user_id;
+
+    // Print the name of the recommended cryptocurrency
+    for (int index : recom_crypto_indexes) {
+        if (query_crypto[index].size() > name_index)
+            os << " " << query_crypto[index][name_index];
         else
-            os << centroids[cluster_i]->getId() << "}" << endl;
+            os << " " << query_crypto[index][0];
     }
-    os << "clustering_time: " << time_span.count() << endl;
-    os << "Silhouette: [";
-    os << sill[0];
-    for (int i = 1; i < sill.size(); i++)
-        os << ", " << sill[i];
-    os << "]" << endl;
-
-    if (print_complete) {
-        for (int cluster_i = 0; cluster_i < clusters.size(); cluster_i++) {
-            os << "CLUSTER-" << cluster_i + 1 << " {";
-            os << clusters[cluster_i][0]->getId();
-            for (int i = 1; i < clusters[cluster_i].size(); i++)
-                os << ", " << clusters[cluster_i][i]->getId();
-            os << "}" << endl;
-        }
-    }
+    os << "\n";
 }
-
-

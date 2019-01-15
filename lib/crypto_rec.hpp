@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <cmath>
 
 #include "./data_structures/cust_vector.hpp"
 #include "./data_structures/tweet.h"
@@ -39,6 +40,16 @@ void parallel_quickSort(std::vector<double>& sim, std::vector< CustVector<dim_ty
 // Parallel partition implementation, to be used in parallel quicksort for cosine similarities and neighbors
 template <typename dim_type>
 int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high);
+
+// For a user, calculate and return his predicted scores for unknown cryptocurrencies
+template <typename dim_type>
+std::vector<dim_type> get_predicted_user_sim(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user,
+        std::vector<double> similarities);
+
+// Return predicted top N (highest scoring) cryptocurrency indexes for an input user
+template <typename dim_type>
+std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N,
+        std::vector<double> similarities);
 
 /*
 * Template utility function definitions
@@ -169,15 +180,59 @@ int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_typ
 template <typename dim_type>
 void parallel_quickSort(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high) {
     if (low < high) {
-        /* pi is partitioning index, arr[p] is now
-           at right place */
         int pi = parralel_partition(sim, neighbors, low, high);
 
-        // Separately sort elements before
-        // partition and after partition
+        // Separately sort elements before partition and after partition
         parallel_quickSort(sim, neighbors, low, pi - 1);
         parallel_quickSort(sim, neighbors, pi + 1, high);
     }
+}
+
+
+template <typename dim_type>
+std::vector<dim_type> get_predicted_user_sim(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user,
+        std::vector<double> similarities) {
+    std::vector<dim_type> predicted_scores(user.getDimensions()->begin(), user.getDimensions()->end());
+
+    for (int index : user.getUnknownIndexes()) {
+        double main_sum = 0;
+        double abs_sum = 0;
+
+        for (int i = 0; i < neighbors.size(); i++) {
+            double cosine_sim = similarities[i];
+            abs_sum = abs_sum + fabs(cosine_sim);
+
+            std::vector<dim_type>* neigh_scores = neighbors[i]->getDimensions();
+            double neigh_mean = neighbors[i]->getKnownMean();
+
+            main_sum = main_sum + (cosine_sim * (neigh_scores->at(index) - neigh_mean));
+        }
+
+        double predicted_score = main_sum / abs_sum;
+        predicted_score = predicted_score + user.getKnownMean();
+
+        predicted_scores[index] = predicted_score;
+    }
+
+    return predicted_scores;
+}
+
+
+template <typename dim_type>
+std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N,
+        std::vector<double> similarities) {
+
+    std::vector<dim_type> predicted_scores = get_predicted_user_sim(neighbors, user, similarities);
+    std::vector<int> unknown_indexes = user.getUnknownIndexes();
+    std::vector<dim_type> unknown_predicted(unknown_indexes.size());
+
+    for (int i = 0; i < unknown_indexes.size(); i++)
+        unknown_predicted[i] = predicted_scores[unknown_indexes[i]];
+
+    //parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
+
+    unknown_indexes.resize(N);
+    return unknown_indexes;
 }
 
 
