@@ -7,20 +7,18 @@
 #include <set>
 
 /*
- * Custom Hashtable
+ * Tweet
  *
- * Hashtable class used for LSH to store vectors in buckets
- * Therefore, contains a given number of buckets and a hash generator to determine
- * in which bucket an input vector should be placed
+ * Tweet class used for cryptocurrency recommendation, it stores the tweet's id, the id of the iser that posted it,
+ * the indexes of the cryptocurrencies that are mentioned in it (from the input cryptocurrency query file) and
+ * its overall sentiment score
  *
- * Accepts any HashGenerator object as its hash generator, so that it can be used for
- * any metric we want to use
+ * Its constructor accepts the actual tweet (words), a lexicon for scoring the tweet and the query words,
+ * in this case the different words representing different cryptocurrencies, then the tweet's sentiment
+ * score is calculated
  *
- * Templated, so that it can store any type of vector (int, float type dimensions)
+ * There is no need to save the actual tweet words
  *
- *
- *
- * NO NEED TO KEEP TWEET'S ACTUAL WORDS
  */
 
 
@@ -32,7 +30,7 @@ private:
     double sentiment_score;
 
 public:
-    // EXPAPAPPAPAPAPP CALCULATE
+    // Store essential tweet information and calculate overall sentiment score
     Tweet(std::vector<std::string>& tweet_words, std::unordered_map<std::string, float>& lexicon,
             std::vector< std::vector<std::string> >& query_crypto);
 

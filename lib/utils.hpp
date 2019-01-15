@@ -67,18 +67,15 @@ std::vector<std::string> file_to_args(std::string filename, char delimiter);
 
 // Return vector that contains vector of strings from input file
 std::vector< std::vector<std::string> > file_to_str_vectors(std::string filename, char delimiter);
+// If needed, also read P from input vector file
+std::vector< std::vector<std::string> > file_to_str_vectors(std::string filename, char delimiter, int* P);
 
 // Return an unordered map that is used to bind a word to a score
 // Used for tweet sentiment analysis
 std::unordered_map<std::string, float> file_to_lexicon(std::string filename, char delimiter);
 
 
-//
-template <typename dim_type>
-std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<std::string, Tweet> tweets, int crypto_num);
 
-template <typename dim_type>
-std::vector< CustVector<dim_type> > clusters_to_user_vectors();
 
 /*
 * Template utility function definitions
@@ -178,37 +175,6 @@ double find_min_vector_distance(std::vector< CustVector<vector_type>* >& vectors
     }
 
     return min_distance;
-}
-
-
-template <typename dim_type>
-std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<std::string, Tweet> tweets, int crypto_num) {
-    std::unordered_map< std::string, std::vector<dim_type> > user_map;
-
-    // For each tweet,
-    for (auto& tweet : tweets) {
-        std::string user_id = tweet.second.getUserId();
-        std::vector<int> crypto_indexes = tweet.second.getCryptoIndexes();
-        double score = tweet.second.getSentimentScore();
-
-
-        if (user_map.count(user_id) == 0) {
-            std::vector<dim_type> user_vector(crypto_num);
-            user_map.emplace(user_id, user_vector);
-        }
-
-        for (auto index : crypto_indexes)
-            user_map[user_id][index] = user_map[user_id][index] + score;
-    }
-
-    // Create CustVector objects to represent each user
-    std::vector< CustVector<dim_type> > user_vectors;
-    for (auto& user : user_map) {
-        CustVector<dim_type> current_user(user.first, user.second);
-        user_vectors.emplace_back(current_user);
-    }
-
-    return user_vectors;
 }
 
 

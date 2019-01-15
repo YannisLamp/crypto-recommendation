@@ -92,6 +92,41 @@ vector< vector<string> > file_to_str_vectors(string filename, char delimiter) {
 }
 
 
+vector< vector<string> > file_to_str_vectors(string filename, char delimiter, int* P) {
+    vector< vector<string> > vecs;
+
+    ifstream input_file;
+    input_file.open(filename);
+    if ( !input_file.is_open() )
+        return vecs;
+
+    string line;
+
+    // Read P from input vector file
+    {
+        getline(input_file, line);
+        if (line[line.size()-1] == '\r')
+            line.erase(line.size() - 1);
+        vector<string> current_vector = split(line, delimiter);
+        if (current_vector.size() > 1)
+            *P = stoi(current_vector[1]);
+    }
+
+
+    while (getline(input_file, line)) {
+        // Remove windows carriage return
+        if (line[line.size()-1] == '\r')
+            line.erase(line.size() - 1);
+
+        vector<string> current_vector = split(line, delimiter);
+        vecs.emplace_back(current_vector);
+    }
+
+    input_file.close();
+    return vecs;
+}
+
+
 std::unordered_map<string, float> file_to_lexicon(string filename, char delimiter) {
     std::unordered_map<string, float> lexicon;
 

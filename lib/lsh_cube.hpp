@@ -33,6 +33,10 @@ template <typename vector_type>
 std::vector< CustVector<vector_type>* > get_LSH_combined_buckets(std::vector< CustHashtable<vector_type>* >& lshHashtables,
         CustVector<vector_type>* queryVec);
 
+template <typename vector_type>
+std::vector< CustVector<vector_type>* > get_LSH_filtered_combined_buckets(std::vector< CustHashtable<vector_type>* >& lshHashtables,
+        CustVector<vector_type>* queryVec);
+
 /*
 * Function definitions
 */
@@ -85,6 +89,21 @@ std::vector< CustVector<vector_type>* > get_LSH_combined_buckets(std::vector< Cu
     return output;
 }
 
+
+template <typename vector_type>
+std::vector< CustVector<vector_type>* > get_LSH_filtered_combined_buckets(std::vector< CustHashtable<vector_type>* >& lshHashtables,
+                                                                 CustVector<vector_type>* queryVec) {
+    std::set< CustVector<vector_type>* > buckets;
+    // Put all different vectors of chosen bucket for each lsh hashtable into a set
+    for (int i = 0; i < lshHashtables.size(); i++) {
+        std::vector< CustVector<vector_type>* > filtered_bucket = lshHashtables[i]->getFilteredBucketFor(queryVec);
+        std::copy( filtered_bucket.begin(), filtered_bucket.end(), std::inserter( buckets, buckets.end() ) );
+    }
+
+    // Convert set to vector and return
+    std::vector< CustVector<vector_type>* > output(buckets.begin(), buckets.end());
+    return output;
+}
 
 template <typename vector_type>
 CustHashtable<vector_type>* create_hypercube(std::vector< CustVector<vector_type> >& input_vectors,

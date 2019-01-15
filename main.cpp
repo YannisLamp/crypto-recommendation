@@ -16,6 +16,7 @@
 #include "./lib/clustering_phases/assignment.hpp"
 #include "./lib/clustering_phases/update.hpp"
 #include "./lib/clustering_phases/silhouette.hpp"
+#include "./lib/crypto_rec.hpp"
 
 using namespace std;
 
@@ -56,7 +57,6 @@ int main(int argc, char* argv[]) {
     double min_dist_kmeans = 0.05;
     char csv_delimiter = ' ';
     string lexicon_file, query_file;
-    string metric_type = "cosine";
 
     get_config(config_file, &cluster_num, &k, &L, &lsh_bucket_div, &euclidean_h_w, &csv_delimiter, &cube_range_c,
             &cube_probes, &max_algo_iterations, &min_dist_kmeans, &lexicon_file, &query_file);
@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
      * Create assignment 2 clustering data
      *
      * Note that any combination of clustering phases from assignment 2 can be used here, though a combination of
-     * kmeans++ for initialization, LSH range search for assignment and kmeans for updating the cluster centers is
+     * kmeans++ for initialization, lloyds for assignment and kmeans for updating the cluster centers is
      * used here, as it provides a very good results quite fast
      *
      * To speed up the clustering, random center selection can be used instead of kmeans++
@@ -86,8 +86,6 @@ int main(int argc, char* argv[]) {
     delete inputReader;
 
 
-    vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors_of_2, metric_type, k, L,
-            lsh_bucket_div, euclidean_h_w);
 
     // Fast and reliable clustering, add random selection to make it faster
     {
@@ -96,7 +94,7 @@ int main(int argc, char* argv[]) {
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
-            lsh_range_assignment(input_vectors, lsh_hashtables, centroids, metric_type);
+            lloyds_assignment(input_vectors, centroids, metric_type);
             continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
             clustering_iterations++;
         }
@@ -127,8 +125,8 @@ int main(int argc, char* argv[]) {
     //vector< CustHashtable<double>* > lsh_hashtables = create_LSH_hashtables<double>(input_vectors, metric_type, k, L,
     //        lsh_bucket_div, euclidean_h_w);
 
-
-    vector< vector<string> > input_tweets = file_to_str_vectors(input_file, csv_delimiter);
+    int P = 1;
+    vector< vector<string> > input_tweets = file_to_str_vectors(input_file, csv_delimiter, &P);
     vector< vector<string> > query_crypto = file_to_str_vectors(query_file, csv_delimiter);
     unordered_map<string, float> lexicon = file_to_lexicon(lexicon_file, csv_delimiter);
 
@@ -141,22 +139,81 @@ int main(int argc, char* argv[]) {
         tweets.emplace(tweetWStats.getId(), tweetWStats);
     }
 
+    // Convert tweets to user vectors, also filter useless users and give the unknown rating the value of the vector's mean
     vector< CustVector<double> > user_vectors = tweets_to_user_vectors<double>(tweets, query_crypto.size());
 
-    /*for (auto vec : user_vectors) {
-        if (vec.getId() == "30") {
-            int aaaaaa= 0;
-        }
-    }*/
-
-    int aaa=0;
 
     /*
      * Cosine LSH Recommendation
+     *
+     * Part A.
+     */
+
+
+    // Create LSH hashtables for LSH recommendation
+    {
+        string metric_type = "cosine";
+        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
+        vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
+                lsh_bucket_div, euclidean_h_w);
+
+        // For each user, calculate actual recommendations
+        for (auto &user : user_vectors) {
+            std::vector< CustVector<double>* > neighbors = get_LSH_filtered_combined_buckets(lsh_hashtables, &user);
+            vector<double> similarities = get_P_closest(neighbors, user, P);
+
+            // Get top 5 recommendations
+            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+            // mean value. So during this proccess the mean of the vector is subtracted from each rating
+            vector<int> rec_crypto_indexes = get_top_N_recom(user, neighbors, 5, similarities);
+            //print_recommendations();
+            int aaa=0;
+        }
+        //chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+        //chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double> >(t2 - t1);
+        //cout <<
+
+    }
+
+
+    /*
+     * Cosine LSH Recommendation
+     *
+     * Part B.
      */
 
 
 
+    /*
+     * Clustering Recommendation
+     *
+     * Part A.
+     */
+
+
+    // Fast and reliable clustering, add random selection to make it faster
+    /*{
+        vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
+        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        int clustering_iterations = 0;
+        bool continue_clustering = true;
+        while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
+            lloyds_assignment(input_vectors, centroids, metric_type);
+            continue_clustering = k_means(input_vectors, centroids, metric_type, min_dist_kmeans);
+            clustering_iterations++;
+        }
+
+        // Stats printing
+        std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
+                                                                                                centroids.size());
+        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
+        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
+
+        // If k-means is used then delete centers
+        for (int i = 0; i < centroids.size(); i++)
+            delete centroids[i];
+
+    }*/
 
 
 
@@ -170,6 +227,12 @@ int main(int argc, char* argv[]) {
     /*outFile.close();
     for (int i = 0; i < lsh_hashtables.size(); i++) {
         delete lsh_hashtables[i];
+    }
+
+
+     for (auto& user : user_vectors) {
+        if (user.getId() == "30")
+            int aaaa=0;
     }
     */
 }
