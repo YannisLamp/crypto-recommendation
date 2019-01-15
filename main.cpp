@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
     delete inputReader;
 
     // Fast and accurate clustering, add random selection to make it faster
-    /*{
+    {
         vector<CustVector<double> *> centroids = rand_selection(input_vectors, cluster_num);
         //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
@@ -97,17 +97,15 @@ int main(int argc, char* argv[]) {
             clustering_iterations++;
         }
 
-        // Stats printing
         std::vector<std::vector<CustVector<double> *> > clusters = separate_clusters_from_input(input_vectors,
                 centroids.size());
-        std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
-        print_stats<double>(outFile, clusters, centroids, sill, algorithm, metric_type, time_span, true, print_complete);
+        //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
 
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
+    }
 
-    }*/
 
 
 
@@ -135,6 +133,7 @@ int main(int argc, char* argv[]) {
 
     // Convert tweets to user vectors, also filter useless users and give the unknown rating the value of the vector's mean
     vector< CustVector<double> > user_vectors = tweets_to_user_vectors<double>(tweets, query_crypto.size());
+    vector< CustVector<double> > fake_user_vectors =
     ofstream outFile(output_file);
 
     /*
@@ -144,12 +143,12 @@ int main(int argc, char* argv[]) {
      */
 
 
-    // Create LSH hashtables for LSH recommendation
-    {
+    /*{
         string metric_type = "cosine";
         outFile << "Cosine LSH" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 
+        // Create LSH hashtables for LSH recommendation
         vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
                 lsh_bucket_div, euclidean_h_w);
 
@@ -166,13 +165,11 @@ int main(int argc, char* argv[]) {
         }
 
         chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast<chrono::milliseconds>(t2 - t1);
-        outFile << "Execution Time: " << time_span.count() << endl;
+        outFile << "Execution Time: " << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count() << endl;
 
         for (int i = 0; i < lsh_hashtables.size(); i++)
             delete lsh_hashtables[i];
-    }
-    int aaa=0;
+    }*/
 
 
     /*
@@ -182,6 +179,34 @@ int main(int argc, char* argv[]) {
      */
 
 
+    {
+        string metric_type = "cosine";
+        outFile << "Cosine LSH" << endl;
+        chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
+
+        // Create LSH hashtables for LSH recommendation
+        vector<CustHashtable<double>*> lsh_hashtables = create_LSH_hashtables<double>(user_vectors, metric_type, k, L,
+                lsh_bucket_div, euclidean_h_w);
+
+        // For each user, calculate actual recommendations
+        for (auto &user : user_vectors) {
+            std::vector< CustVector<double>* > neighbors = get_LSH_filtered_combined_buckets(lsh_hashtables, &user);
+            vector<double> similarities = get_P_closest(neighbors, user, P);
+
+            // Get top 2 recommendations
+            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+            // mean value. So during this proccess the mean of the vector is subtracted from each rating
+            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2, similarities);
+            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+        }
+
+        chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+        outFile << "Execution Time: " << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count() << endl;
+
+        for (int i = 0; i < lsh_hashtables.size(); i++)
+            delete lsh_hashtables[i];
+    }
+
 
     /*
      * Clustering Recommendation
@@ -190,7 +215,6 @@ int main(int argc, char* argv[]) {
      */
 
 
-    // Fast and reliable clustering, add random selection to make it faster
     /*{
         string metric_type = "euclidean";
         outFile << "Clustering Recommendation" << endl;
@@ -222,13 +246,10 @@ int main(int argc, char* argv[]) {
 
         //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
         chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
-        chrono::duration<double> time_span = chrono::duration_cast<chrono::milliseconds>(t2 - t1);
-        outFile << "Execution Time: " << time_span.count() << endl;
-
+        outFile << "Execution Time: " << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count() << endl;
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
-
     }*/
 
 

@@ -25,6 +25,10 @@ template <typename dim_type>
 std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets, int crypto_num);
 
 template <typename dim_type>
+std::vector< CustVector<dim_type> > clusters_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets,
+        std::vector< CustVector<dim_type> >& vectors, int crypto_num, int user_num);
+
+template <typename dim_type>
 std::vector< CustVector<dim_type> > clusters_to_user_vectors();
 
 // Returns a vector parallel to the input neighbors vector that contains the cosine similarity of each user pair
@@ -33,12 +37,12 @@ template <typename dim_type>
 std::vector<double> get_P_closest(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int P);
 
 // Parralel quicksort implementation
-template <typename dim_type>
-void parallel_quickSort(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high);
+template <typename dim_type, typename type>
+void parallel_quickSort(std::vector<dim_type>& sim, std::vector< type >& neighbors, int low, int high);
 
 // Parallel partition implementation, to be used in parallel quicksort for cosine similarities and neighbors
-template <typename dim_type>
-int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high);
+template <typename dim_type, typename type>
+int parralel_partition(std::vector<dim_type>& sim, std::vector< type >& neighbors, int low, int high);
 
 // For a user, calculate and return his predicted scores for unknown cryptocurrencies
 template <typename dim_type>
@@ -126,6 +130,15 @@ std::vector< CustVector<dim_type> > tweets_to_user_vectors(std::unordered_map<st
 
 
 template <typename dim_type>
+std::vector< CustVector<dim_type> > clusters_to_user_vectors(std::unordered_map<std::string, Tweet>& tweets,
+        std::vector< CustVector<dim_type> >& vectors, int crypto_num, int user_num) {
+
+
+
+}
+
+
+template <typename dim_type>
 std::vector<double> get_P_closest(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int P) {
     // Cache cosine similarities in vector
     std::vector<double> similarities(neighbors.size());
@@ -146,8 +159,8 @@ std::vector<double> get_P_closest(std::vector< CustVector<dim_type>* >& neighbor
 }
 
 
-template <typename dim_type>
-int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high) {
+template <typename dim_type, typename type>
+int parralel_partition(std::vector<dim_type>& sim, std::vector< type >& neighbors, int low, int high) {
     double pivot = sim[high];
     int i = (low - 1);
 
@@ -157,21 +170,21 @@ int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_typ
             i++;
 
             // Parallel swap
-            double temp_sim = sim[i];
+            dim_type temp_sim = sim[i];
             sim[i] = sim[j];
             sim[j] = temp_sim;
 
-            CustVector<dim_type>* temp_neigh = neighbors[i];
+            type temp_neigh = neighbors[i];
             neighbors[i] = neighbors[j];
             neighbors[j] = temp_neigh;
         }
     }
 
-    double temp_sim = sim[i + 1];
+    dim_type temp_sim = sim[i + 1];
     sim[i + 1] = sim[high];
     sim[high] = temp_sim;
 
-    CustVector<dim_type>* temp_neigh = neighbors[i + 1];
+    type temp_neigh = neighbors[i + 1];
     neighbors[i + 1] = neighbors[high];
     neighbors[high] = temp_neigh;
 
@@ -180,8 +193,8 @@ int parralel_partition(std::vector<double>& sim, std::vector< CustVector<dim_typ
 
 
 // Parralel quicksort implementation
-template <typename dim_type>
-void parallel_quickSort(std::vector<double>& sim, std::vector< CustVector<dim_type>* >& neighbors, int low, int high) {
+template <typename dim_type, typename type>
+void parallel_quickSort(std::vector<dim_type>& sim, std::vector< type >& neighbors, int low, int high) {
     if (low < high) {
         int pi = parralel_partition(sim, neighbors, low, high);
 
@@ -232,7 +245,7 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
     for (int i = 0; i < unknown_indexes.size(); i++)
         unknown_predicted[i] = predicted_scores[unknown_indexes[i]];
 
-    //parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
+    parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
 
     unknown_indexes.resize(N);
     return unknown_indexes;
@@ -253,7 +266,7 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
     for (int i = 0; i < unknown_indexes.size(); i++)
         unknown_predicted[i] = predicted_scores[unknown_indexes[i]];
 
-    //parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
+    parallel_quickSort(unknown_predicted, unknown_indexes, 0, unknown_predicted.size()-1);
 
     unknown_indexes.resize(N);
     return unknown_indexes;
