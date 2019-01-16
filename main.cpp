@@ -5,6 +5,7 @@
 #include <random>
 #include <vector>
 #include <utility>
+#include <cmath>
 
 #include "./lib/in_out/arg_parser.h"
 #include "./lib/in_out/vector_reader.hpp"
@@ -19,6 +20,9 @@
 #include "./lib/crypto_rec.hpp"
 
 using namespace std;
+
+double lsh_rec_10_fold_validation_A(vector< CustVector<double> >& user_vectors, string metric_type, int k, int L,
+        int lsh_bucket_div, double euclidean_h_w, int P);
 
 void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate);
 
@@ -86,11 +90,10 @@ int main(int argc, char* argv[]) {
     delete inputReader;
 
     //std::vector<std::vector<CustVector<double> *> > clusters_of_2;
-    // Fast and accurate clustering, add random selection to make it faster
+    // Fast and accurate clustering
     {
         string metric_type = "cosine";
-        vector<CustVector<double> *> centroids = rand_selection(input_vectors_of_2, proj_2_cluster_num);
-        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        vector<CustVector<double> *> centroids = k_means_pp(input_vectors_of_2, proj_2_cluster_num, metric_type);
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
@@ -155,13 +158,15 @@ int main(int argc, char* argv[]) {
         // For each user, calculate actual recommendations
         for (auto &user : user_vectors) {
             std::vector< CustVector<double>* > neighbors = get_LSH_filtered_combined_buckets(lsh_hashtables, &user);
-            vector<double> similarities = get_P_closest(neighbors, user, P);
+            if (!neighbors.empty()) {
+                vector<double> similarities1 = get_P_closest(neighbors, user, P);
 
-            // Get top 5 recommendations
-            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
-            // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5, similarities);
-            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+                // Get top 5 recommendations
+                // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+                // mean value. So during this proccess the mean of the vector is subtracted from each rating
+                vector<int> recom_crypto_indexes1 = get_top_N_recom(neighbors, user, 5, similarities1);
+                print_recommendations(outFile, user.getId(), recom_crypto_indexes1, query_crypto, 4);
+            }
         }
 
         chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
@@ -173,17 +178,8 @@ int main(int argc, char* argv[]) {
 
         // 10-fold cross-validation
         if (validate) {
-            int user_div_num = user_vectors.size() / 10;
-
-            std::vector< std::vector< CustVector<double> > > separate_vectors = split_to_10();
-
-            for (int i = 0; i < 10; i++) {
-                
-
-
-            }
-
-
+            double validation = lsh_rec_10_fold_validation_A(user_vectors, metric_type, k, L, lsh_bucket_div, euclidean_h_w, P);
+            cout << " aa" << validation << endl;
         }
 
     }
@@ -208,13 +204,15 @@ int main(int argc, char* argv[]) {
         // For each user, calculate actual recommendations
         for (auto &user : user_vectors) {
             std::vector< CustVector<double>* > neighbors = get_LSH_filtered_combined_buckets(lsh_hashtables, &user);
-            vector<double> similarities = get_P_closest(neighbors, user, P);
+            if (!neighbors.empty()) {
+                vector<double> similarities = get_P_closest(neighbors, user, P);
 
-            // Get top 2 recommendations
-            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
-            // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2, similarities);
-            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+                // Get top 2 recommendations
+                // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+                // mean value. So during this proccess the mean of the vector is subtracted from each rating
+                vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2, similarities);
+                print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+            }
         }
 
         chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
@@ -222,6 +220,13 @@ int main(int argc, char* argv[]) {
 
         for (int i = 0; i < lsh_hashtables.size(); i++)
             delete lsh_hashtables[i];
+
+
+        // 10-fold cross-validation
+        //if (validate) {
+        //    lsh_rec_10_fold_validation_B(user_vectors, fake_user_vectors, metric_type, k, L, lsh_bucket_div, euclidean_h_w, P);
+        //}
+
     }
 
 
@@ -232,14 +237,14 @@ int main(int argc, char* argv[]) {
      */
 
 
-    /*{
+    {
         string metric_type = "euclidean";
         outFile << "Clustering Recommendation" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 
         // Begin clustering
         vector<CustVector<double> *> centroids = rand_selection(user_vectors, cluster_num);
-        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        //vector<CustVector<double> *> centroids = k_means_pp(user_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
@@ -249,16 +254,18 @@ int main(int argc, char* argv[]) {
         }
         std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(user_vectors,
                 centroids.size());
+        //std::vector<double> sill = silhouette_cluster(user_vectors, centroids, metric_type);
 
         // Begin calculating optimal recommendations
         for (auto &user : user_vectors) {
             std::vector< CustVector<double>* > neighbors = clusters[user.getCluster()];
-
-            // Get top 5 recommendations
-            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
-            // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5);
-            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+            if (!neighbors.empty()) {
+                // Get top 5 recommendations
+                // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+                // mean value. So during this proccess the mean of the vector is subtracted from each rating
+                vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 5);
+                print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+            }
         }
 
         //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
@@ -267,7 +274,55 @@ int main(int argc, char* argv[]) {
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
-    }*/
+
+
+        // 10-fold cross-validation
+        /*if (validate) {
+            vector< CustVector<double> > temp_user_vectors = fake_user_vectors;
+
+            std::vector< std::vector< CustVector<double> > > separate_vectors = split_to_10<double>(temp_user_vectors);
+
+            double all_sum = 0;
+            for (int i = 0; i < 10; i++) {
+                double k_sum = 0;
+                // Each time query different vector group
+                std::vector< CustVector<double> > curr_known = merge_except_for<double>(separate_vectors, i);
+
+                // Begin clustering
+                vector<CustVector<double> *> centroids = rand_selection(curr_known, cluster_num);
+                //vector<CustVector<double> *> centroids = k_means_pp(user_vectors, cluster_num, metric_type);
+                int clustering_iterations = 0;
+                bool continue_clustering = true;
+                while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
+                    lloyds_assignment(curr_known, centroids, metric_type);
+                    continue_clustering = k_means(curr_known, centroids, metric_type, min_dist_kmeans);
+                    clustering_iterations++;
+                }
+                std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(curr_known,
+                        centroids.size());
+
+                for (auto& user : separate_vectors[i]) {
+                    // Hide a known value from user
+                    //double old_score = hide_one_score(user);
+
+                    std::vector< CustVector<double>* > neighbors = clusters[user.getCluster()];
+                    vector<double> similarities = get_P_closest(neighbors, user, P);
+                    std::vector<double> pred = get_predicted_user_sim(neighbors, user, similarities);
+
+                    int new_index = user.getUnknownIndexes().at(0);
+                    k_sum = k_sum + (old_score - pred[new_index]);
+                }
+                all_sum = all_sum + (k_sum / separate_vectors.size());
+
+                for (int i = 0; i < centroids.size(); i++)
+                    delete centroids[i];
+            }
+            all_sum = all_sum / 10;
+
+            cout << "Cosine LSH Recommendation MAE: " << all_sum << endl;
+        }*/
+
+    }
 
 
     /*
@@ -276,14 +331,13 @@ int main(int argc, char* argv[]) {
      * Part B.
      */
 
-    /*{
+    {
         string metric_type = "euclidean";
         outFile << "Clustering Recommendation" << endl;
         chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
 
         // Begin clustering
-        vector<CustVector<double> *> centroids = rand_selection(fake_user_vectors, cluster_num);
-        //vector<CustVector<double> *> centroids = k_means_pp(input_vectors, cluster_num, metric_type);
+        vector<CustVector<double> *> centroids = k_means_pp(fake_user_vectors, cluster_num, metric_type);
         int clustering_iterations = 0;
         bool continue_clustering = true;
         while (continue_clustering == true && clustering_iterations < max_algo_iterations) {
@@ -291,8 +345,9 @@ int main(int argc, char* argv[]) {
             continue_clustering = k_means(fake_user_vectors, centroids, metric_type, min_dist_kmeans);
             clustering_iterations++;
         }
-        std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(user_vectors,
+        std::vector< std::vector<CustVector<double>*> > clusters = separate_clusters_from_input(fake_user_vectors,
                 centroids.size());
+        //std::vector<double> sill = silhouette_cluster(fake_user_vectors, centroids, metric_type);
 
         // Begin calculating optimal recommendations
         for (auto &user : user_vectors) {
@@ -308,12 +363,13 @@ int main(int argc, char* argv[]) {
                 }
             }
             std::vector< CustVector<double>* > neighbors = clusters[min_dist_i];
-
-            // Get top 2 recommendations
-            // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
-            // mean value. So during this proccess the mean of the vector is subtracted from each rating
-            vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2);
-            print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+            if (!neighbors.empty()) {
+                // Get top 2 recommendations
+                // Note that the user vectors have not been normalized yet, only the unknown cryptocurrency values have the
+                // mean value. So during this proccess the mean of the vector is subtracted from each rating
+                vector<int> recom_crypto_indexes = get_top_N_recom(neighbors, user, 2);
+                print_recommendations(outFile, user.getId(), recom_crypto_indexes, query_crypto, 4);
+            }
         }
 
         //std::vector<double> sill = silhouette_cluster(clusters, centroids, metric_type);
@@ -322,7 +378,7 @@ int main(int argc, char* argv[]) {
         // If k-means is used then delete centers
         for (int i = 0; i < centroids.size(); i++)
             delete centroids[i];
-    }*/
+    }
 
 
     /*
@@ -331,17 +387,103 @@ int main(int argc, char* argv[]) {
      */
 
     outFile.close();
-    /*for (int i = 0; i < lsh_hashtables.size(); i++) {
-        delete lsh_hashtables[i];
-    }
-
-
-     for (auto& user : user_vectors) {
-        if (user.getId() == "30")
-            int aaaa=0;
-    }
-    */
 }
+
+
+double lsh_rec_10_fold_validation_A(vector< CustVector<double> >& user_vectors, string metric_type, int k, int L,
+        int lsh_bucket_div, double euclidean_h_w, int P) {
+
+    std::vector< std::vector< CustVector<double> > > separate_vectors = split_to_10<double>(user_vectors);
+
+    double all_sum = 0;
+    for (int i = 0; i < 10; i++) {
+        double k_sum = 0;
+        // Each time query different vector group
+        std::vector< CustVector<double> > curr_known = merge_except_for<double>(separate_vectors, i);
+        vector<CustHashtable<double>*> temp_lsh_hashtables = create_LSH_hashtables<double>(curr_known,
+                metric_type, k, L, lsh_bucket_div, euclidean_h_w);
+
+        int calc_user_num = 0;
+        for (auto& user : separate_vectors[i]) {
+            // Hide a known value from user
+            double old_score = 0;
+            bool calculate = hide_one_score(user, &old_score);
+
+            if (calculate) {
+                std::vector<CustVector<double>*> neighbors = get_LSH_filtered_combined_buckets(temp_lsh_hashtables, &user);
+                if (!neighbors.empty()) {
+
+                    vector<double> similarities = get_P_closest(neighbors, user, P);
+                    std::vector<double> pred = get_predicted_user_sim(neighbors, user, similarities);
+
+                    int new_index = user.getUnknownIndexes().at(0);
+                    k_sum = k_sum + fabs(old_score - pred[new_index]);
+                    cout << k_sum << " ksum score " << endl;
+                    if (isnan(k_sum))
+                        int aaaa=0;
+                    calc_user_num++;
+                }
+            }
+        }
+        if (calc_user_num > 0)
+            all_sum = all_sum + (k_sum / calc_user_num);
+
+        for (int i = 0; i < temp_lsh_hashtables.size(); i++)
+            delete temp_lsh_hashtables[i];
+    }
+    all_sum = all_sum / 10;
+
+    return all_sum;
+}
+
+
+/*double lsh_rec_10_fold_validation_B(vector< CustVector<double> >& user_vectors, vector< CustVector<double> >& fake_user_vectors,
+        string metric_type, int k, int L, int lsh_bucket_div, double euclidean_h_w, int P) {
+
+    std::vector< std::vector< CustVector<double> > > separate_vectors = split_to_10<double>(user_vectors);
+
+    double all_sum = 0;
+    for (int i = 0; i < 10; i++) {
+        double k_sum = 0;
+        // Each time query different vector group
+        std::vector< CustVector<double> > curr_known = merge_except_for<double>(separate_vectors, i);
+        vector<CustHashtable<double>*> temp_lsh_hashtables = create_LSH_hashtables<double>(curr_known,
+                metric_type, k, L, lsh_bucket_div, euclidean_h_w);
+
+        int calc_user_num = 0;
+        for (auto& user : separate_vectors[i]) {
+            // Hide a known value from user
+            double old_score = 0;
+            bool calculate = hide_one_score(user, &old_score);
+
+            if (calculate) {
+                std::vector<CustVector<double>*> neighbors = get_LSH_filtered_combined_buckets(temp_lsh_hashtables, &user);
+                if (!neighbors.empty()) {
+
+                    vector<double> similarities = get_P_closest(neighbors, user, P);
+                    std::vector<double> pred = get_predicted_user_sim(neighbors, user, similarities);
+
+                    int new_index = user.getUnknownIndexes().at(0);
+                    k_sum = k_sum + fabs(old_score - pred[new_index]);
+                    cout << k_sum << " ksum score " << endl;
+                    //if (isnan(k_sum))
+                    //    int aaaa=0;
+                    calc_user_num++;
+                }
+            }
+        }
+        if (calc_user_num > 0)
+            all_sum = all_sum + (k_sum / calc_user_num);
+
+        for (int i = 0; i < temp_lsh_hashtables.size(); i++)
+            delete temp_lsh_hashtables[i];
+    }
+    all_sum = all_sum / 10;
+
+    return all_sum;
+}*/
+
+double clustering_rec_10_fold_validation();
 
 
 void get_recommendation_args(int argc, char* argv[], string* input_file, string* output_file, bool* validate) {

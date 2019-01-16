@@ -22,7 +22,7 @@
 template <typename dim_type>
 class CustVector {
 private:
-    const std::string id;
+    std::string id;
     std::vector<dim_type> dimensions;
 
     // Indexes of which dimensions are cryptocurrencies that there is no opinion of
@@ -39,6 +39,8 @@ public:
     CustVector(std::string in_id, std::vector<dim_type> dim_vector);
     CustVector(std::string in_id, std::vector<dim_type> dim_vector, std::set<int> unknown_indexes, double mean);
     CustVector(std::string in_id, std::vector<dim_type> dim_vector, int cluster, double distance);
+    // Copy constructor
+    CustVector(const CustVector &cust2);
 
     // Vector operations
     template <typename in_dim_type>
@@ -56,9 +58,13 @@ public:
     void setCluster(int index, double dist);
     void resetCluster();
 
+    void setKnownMean(double in_mean);
+    void setUnknownIndexes(std::set<int> in_indexes);
+
     std::string getId();
     std::vector<dim_type>* getDimensions();
     std::vector<int> getUnknownIndexes();
+    std::set<int> getUnknownIndexesSet();
     double getKnownMean();
     unsigned int getDimNumber();
     int getCluster();
@@ -84,7 +90,16 @@ template <typename dim_type>
 CustVector<dim_type>::CustVector(std::string in_id, std::vector<dim_type> dim_vector, int cluster, double distance)
         : id(std::move(in_id)), dimensions(dim_vector), cluster_i(cluster), dist_from_centroid(distance), known_mean(0) {};
 
-
+// Copy constructor
+template <typename dim_type>
+CustVector<dim_type>::CustVector(const CustVector &cust2) {
+    id = cust2.id;
+    dimensions = cust2.dimensions;
+    unknown_indexes = cust2.unknown_indexes;
+    known_mean = cust2.known_mean;
+    cluster_i = cust2.cluster_i;
+    dist_from_centroid = cust2.dist_from_centroid;
+}
 
 
 template <typename dim_type>
@@ -192,6 +207,15 @@ void CustVector<dim_type>::resetCluster() {
     dist_from_centroid = 0;
 }
 
+template <typename dim_type>
+void CustVector<dim_type>::setKnownMean(double in_mean) {
+    known_mean = in_mean;
+}
+
+template <typename dim_type>
+void CustVector<dim_type>::setUnknownIndexes(std::set<int> in_indexes) {
+    unknown_indexes = in_indexes;
+}
 
 template <typename dim_type>
 std::string CustVector<dim_type>::getId() { return id; }
@@ -206,6 +230,10 @@ std::vector<int> CustVector<dim_type>::getUnknownIndexes() {
     std::vector<int> indexes_vector(unknown_indexes.begin(), unknown_indexes.end());
     return indexes_vector;
 }
+
+template <typename dim_type>
+std::set<int> CustVector<dim_type>::getUnknownIndexesSet() { return unknown_indexes; }
+
 
 template <typename dim_type>
 double CustVector<dim_type>::getKnownMean() { return known_mean; }

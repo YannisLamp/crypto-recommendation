@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cmath>
+#include <ctime>
 
 #include "./data_structures/cust_vector.hpp"
 #include "./data_structures/tweet.h"
@@ -56,11 +57,18 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
 template <typename dim_type>
 std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors, CustVector<dim_type>& user, int N);
 
+// Split vector of Custom vector into 10 vectors, used for 10-fold cross validation
 template <typename dim_type>
-std::vector< std::vector< CustVector<dim_type> > > split_to_10();
+std::vector< std::vector< CustVector<dim_type> > > split_to_10(std::vector< CustVector<dim_type> > input_vectors);
 
-//template <typename dim_type>
+// Merge input vectors into a vector of Custom vectors except for one, used for 10-fold cross validation
+template <typename dim_type>
+std::vector< CustVector<dim_type> > merge_except_for(std::vector< std::vector< CustVector<dim_type> > > vectors_to_merge,
+        int not_merge_index);
 
+// Alter input Custom vector so that one random score is hidden (returned by the function)
+template <typename dim_type>
+bool hide_one_score(CustVector<dim_type>& inVector, double* old_score);
 
 /*
 * Template utility function definitions
@@ -338,9 +346,106 @@ std::vector<int> get_top_N_recom(std::vector< CustVector<dim_type>* >& neighbors
 
 
 template <typename dim_type>
-std::vector< std::vector< CustVector<dim_type> > > split_to_10() {
+std::vector< std::vector< CustVector<dim_type> > > split_to_10(std::vector< CustVector<dim_type> > input_vectors) {
+    srand((int)time(0));
+    int each_vector_size = input_vectors.size() / 10;
+
+    std::vector< std::vector< CustVector<dim_type> > > split_vectors;
+    for (int i = 0; i < 10; i++) {
+        std::vector< CustVector<dim_type> > curr_split;
+        curr_split.reserve(each_vector_size);
+        for (int curr_size = 0; curr_size < each_vector_size && input_vectors.size() > 0; curr_size++) {
+            int rand_i = rand() % input_vectors.size();
+
+            curr_split.emplace_back(input_vectors[rand_i]);
+            input_vectors.erase(input_vectors.begin() + rand_i);
+        }
+        split_vectors.emplace_back(curr_split);
+    }
+
+    return split_vectors;
+}
 
 
+template <typename dim_type>
+std::vector< CustVector<dim_type> > merge_except_for(std::vector< std::vector< CustVector<dim_type> > > vectors_to_merge,
+        int not_merge_index) {
+
+    int whole_size = 0;
+    for (int i = 0; i < vectors_to_merge.size(); i++) {
+        if (i != not_merge_index)
+            whole_size = whole_size + vectors_to_merge[i].size();
+    }
+
+    std::vector< CustVector<dim_type> > merged;
+    merged.reserve(whole_size);
+
+    for (int i = 0; i < vectors_to_merge.size(); i++) {
+        if (i != not_merge_index) {
+            merged.insert(merged.end(), vectors_to_merge[i].begin(), vectors_to_merge[i].end());
+        }
+    }
+
+    return merged;
+}
+
+
+template <typename dim_type>
+bool hide_one_score(CustVector<dim_type>& inVector, double* old_score) {
+    // Find random index to hide
+    std::vector<dim_type>& in_dimensions = *(inVector.getDimensions());
+
+    // Get all known indexes
+    std::vector<int> known_indexes;
+    for (int i = 0; i < in_dimensions.size(); i++) {
+        if (inVector.getUnknownIndexesSet().count(i) == 0)
+            known_indexes.emplace_back(i);
+    }
+    // If the user oly knows one cryptocurrency before hiding, then skip hiding process
+    if (known_indexes.size() < 2)
+        return false;
+
+
+    // Get random index and save the old score to be hidden
+    srand((int)time(0));
+    int hide_index = rand() % known_indexes.size();
+    *old_score = in_dimensions[hide_index];
+
+    // Now "known" cryptocurrencies will have the value of 0
+    for (int i : inVector.getUnknownIndexes())
+        in_dimensions[i] = 0;
+
+    // Calculate new mean
+    double new_mean = 0;
+    int known_num = 0;
+    bool useless = true;
+    for (int i = 0; i < in_dimensions.size(); i++) {
+        if (i != hide_index) {
+            new_mean = new_mean + in_dimensions[i];
+            known_num++;
+
+            if (in_dimensions[i] != 0)
+                useless = false;
+        }
+    }
+
+    if (useless)
+        return false;
+
+    // Make the unknown score's value equal to the new means
+    new_mean = new_mean / known_num;
+    in_dimensions[hide_index] = new_mean;
+
+    //for (int i : inVector.getUnknownIndexes()) {
+    //    new_dims[i] = new_means;
+    //}
+
+    std::set<int> new_unknown_set;
+    new_unknown_set.emplace(hide_index);
+    inVector.setKnownMean(new_mean);
+    inVector.setUnknownIndexes(new_unknown_set);
+
+    return true;
 }
 
 #endif //CRYPTO_REC_HPP
